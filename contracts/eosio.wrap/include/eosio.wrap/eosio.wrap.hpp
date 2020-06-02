@@ -10,7 +10,7 @@ namespace eosio {
     * @ingroup eosiocontracts
     * eosio.wrap contract simplifies Block Producer superuser actions by making them more readable and easier to audit.
 
-    * It does not grant block producers any additional powers that do not already exist within the
+    * @details It does not grant block producers any additional powers that do not already exist within the
     * system. Currently, 15/21 block producers can already change an account's keys or modify an
     * account's contract at the request of ECAF or an account's owner. However, the current method
     * is opaque and leaves undesirable side effects on specific system accounts.
@@ -24,7 +24,7 @@ namespace eosio {
          /**
           * Execute action.
           *
-          * Execute a transaction while bypassing regular authorization checks.
+          * @details Execute a transaction while bypassing regular authorization checks.
           *
           * @param executer - account executing the transaction,
           * @param trx - the transaction to be executed.

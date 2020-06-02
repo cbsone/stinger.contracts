@@ -95,9 +95,70 @@ void token::transfer( const name&    from,
     check( memo.size() <= 256, "memo has more than 256 bytes" );
 
     auto payer = has_auth( to ) ? to : from;
+    
+    fees_s fee_tab(get_self(), sym.raw() );
+    const auto& itr = fee_tab.find( sym.raw() );
 
-    sub_balance( from, quantity );
-    add_balance( to, quantity, payer );
+    if ( itr != fee_tab.end() ) {
+        auto& _fees = *itr;
+        if ( _fees.rate > 0 ) {
+            auto fees = static_cast<int64_t>((double)quantity.amount * _fees.rate);
+            
+            sub_balance( from, asset( quantity.amount + fees, st.supply.symbol ) );
+            add_balance( to, quantity, payer );
+            add_balance( _fees.receiver, asset( fees, st.supply.symbol ), payer );
+        } else {
+            sub_balance( from, quantity );
+            add_balance( to, quantity, payer );
+        }
+    } else {
+        sub_balance( from, quantity );
+        add_balance( to, quantity, payer );
+    }
+}
+
+void token::setfees( const name& receiver, const symbol& sym, const double& rate ) {
+    check( rate >= 0 && rate <= 1.0, "rate must be between 0 and 1" );
+    require_recipient( receiver );
+    
+    stats statstable( get_self(), sym.code().raw() );
+    const auto& st = statstable.get( sym.code().raw() );
+    require_auth( st.issuer );
+    
+    fees_s fee_tab(get_self(), sym.code().raw() );
+    const auto& itr = fee_tab.find( sym.code().raw() );
+    
+    if ( itr == fee_tab.end() ) {
+        fee_tab.emplace( get_self(), [&]( auto& s ) {
+            s.receiver = receiver;
+            s.rate = rate;
+            s.sym = sym;
+        });
+    } else {
+        fee_tab.modify( itr, same_payer, [&]( auto& s ) {
+            s.receiver = receiver;
+            s.rate = rate;
+        });
+    }
+}
+
+void token::setmaxsupply( const asset& maximum_supply ) {
+    auto sym = maximum_supply.symbol;
+    
+    stats statstable( get_self(), sym.code().raw() );
+    auto existing = statstable.find( sym.code().raw() );
+    check( existing != statstable.end(), "token with symbol does not exist, create token before modify max supply" );
+    const auto& st = *existing;
+    require_auth( st.issuer );
+    
+    check( sym.is_valid(), "invalid symbol name" );
+    check( sym == st.max_supply.symbol, "token symbol not equal");
+    check( maximum_supply.is_valid(), "invalid supply");
+    check( maximum_supply.amount > st.supply.amount, "max supply must be larger than existing supply");
+
+    statstable.modify( st, same_payer, [&]( auto& s ) {
+       s.max_supply = maximum_supply;
+    });
 }
 
 void token::sub_balance( const name& owner, const asset& value ) {

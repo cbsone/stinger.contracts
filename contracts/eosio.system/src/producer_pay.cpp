@@ -64,6 +64,148 @@ namespace eosiosystem {
          }
       }
    }
+   
+   
+   void system_contract::claimrewards( const name& owner ) {
+      require_auth( owner );
+
+      eosio::print("Claiming rewards; ");
+      const auto& prod = _producers.get( owner.value );
+      check( prod.active(), "producer does not have an active key" ); // метод может быть вызван только нодой
+
+      //check( _gstate.thresh_activated_stake_time != time_point(),
+      //              "cannot claim rewards until the chain is activated (at least 15% of all tokens participate in voting)" ); // ? проверяем, можно ли выплатить стейк
+
+      const auto ct = current_time_point();
+
+      //check( ct - prod.last_claim_time > microseconds(useconds_per_day), "already claimed rewards within past day" ); // выплата наград не чаще, чем раз в день
+
+      const asset token_supply   = token::get_supply(token_account, cbs_symbol.code() ); // получить системный токен
+      const auto usecs_since_last_fill = (ct - _gstate.last_pervote_bucket_fill).count();    // сколько времени прошло после предыдущего пересчета наград
+
+      bool is_validator = false;                            // это нода или валидатор
+      auto idx = _producers4.get_index<"bytotalstake"_n>();  
+      int i = 0;
+
+      // ищем ноду в топ-21, если она там есть - это валидатор
+      for( auto it = idx.cbegin(); it != idx.cend() && i < 21 && 0 < it->total_stake; ++it ) {
+         if ((*it).owner == owner) {
+            is_validator = true;
+            eosio::print("This node is a validator");
+            break;
+         }
+      }
+
+      auto prod2 = _producers2.find( owner.value );
+
+      /// New metric to be used in pervote pay calculation. Instead of vote weight ratio, we combine vote weight and
+      /// time duration the vote weight has been held into one metric.
+      const auto last_claim_plus_3days = prod.last_claim_time + microseconds(3 * useconds_per_day);
+
+      bool crossed_threshold       = (last_claim_plus_3days <= ct);
+      bool updated_after_threshold = true;
+      if ( prod2 != _producers2.end() ) {
+         updated_after_threshold = (last_claim_plus_3days <= prod2->last_votepay_share_update);
+      } else {
+         prod2 = _producers2.emplace( owner, [&]( producer_info2& info  ) {
+            info.owner                     = owner;
+            info.last_votepay_share_update = ct;
+         });
+      }
+
+      // получаем список стейкеров
+      auto prod3 = _producers4.find( owner.value );
+      if ( prod3 == _producers4.end() ) {
+         // если нет записи в producer_table3, создаем ее
+         prod3 = _producers4.emplace( owner, [&]( producer_stake& info ) {
+            info.owner = owner;
+            info.fees  = 0;
+            info.slots = std::vector<slot_info>();
+            info.total_stake = 0;
+         });
+      }
+
+      double new_votepay_share = update_producer_votepay_share( prod2,
+         ct,
+         updated_after_threshold ? 0.0 : prod.total_votes,
+         true // reset votepay_share to zero after updating
+      );
+
+      update_total_votepay_share( ct, -new_votepay_share, (updated_after_threshold ? prod.total_votes : 0.0) );
+
+      int64_t new_tokens = 0; // Сколько токенов должно быть выпущено за месяц
+      int64_t fee_rate = 0;   // Комиссия
+
+      // Временный массив с наградами
+      std::vector<std::pair<name, int64_t>> rewards;
+      
+      // Множитель по времени последней выплаты в %
+      double time_mul = (ct - prod.last_claim_time).count() / ( useconds_per_day * 30 );
+      eosio::print("Time multiplier: ");
+      eosio::print(time_mul);
+      eosio::print("; ");
+      
+      eosio::print("Checking slots (count=");
+      eosio::print(prod3->slots.size());
+      eosio::print("; ");
+      for ( auto & slot : prod3->slots ) {
+         eosio::print("Slot: ");
+         eosio::print(slot.stake_holder.value);
+         eosio::print("; ");
+         int64_t reward = slot.value;  // награда стейкера
+         
+         eosio::print("Reward: ");
+         eosio::print(reward);
+         eosio::print("; ");
+
+         if ( is_validator ) {
+            reward *= vote_mul;  // x7
+         } else {
+            reward *= node_mul;  // x6
+         }
+
+         /// ! TEST
+         // reward = static_cast<int64_t>(time_mul * (double)reward);         // рассчитываем награду с учетом времени с прошлой выплаты
+         int64_t fee = static_cast<int64_t>(prod3->fees * (double)reward); // рассчитываем комиссию
+         eosio::print("Fee: ");
+         eosio::print(fee);
+         eosio::print("; ");
+
+         reward -= fee;                // убиаем комиссию из награды
+         fee_rate += fee;              // комиссию с этого стейкера плюсуем к общей комисии
+         new_tokens += reward + fee;   // прибавляем награду и комиссию к общему объему эмисии
+
+         rewards.push_back(std::make_pair(slot.stake_holder, reward));  // записываем сколько выплатить награды этому стейкеру
+      }
+
+      eosio::print("New tokens: ");
+      eosio::print(new_tokens);
+      eosio::print("; ");
+      if (new_tokens > 0) {
+         {
+            // выпускаем токены
+            token::issue_action issue_act{ token_account, { {get_self(), active_permission} } };
+            issue_act.send( get_self(), asset(new_tokens, cbsch_symbol), "issue tokens for pay to stake holders" );
+         }
+         {
+            token::transfer_action transfer_act{ token_account, { {get_self(), active_permission} } };
+
+            // переводим комиссию ноде/валидатору
+            if ( fee_rate > 0 ) {
+               transfer_act.send( get_self(), owner, asset(fee_rate, cbsch_symbol), "node or validator fee" );
+            }
+
+            // переводим награду стейкерам
+            for ( auto & kv : rewards ) {
+               if ( kv.second > 0 ) {
+                  transfer_act.send( get_self(), kv.first, asset(kv.second, cbsch_symbol), "stake holder payment" );
+               }
+            }
+         }
+      }
+      eosio::print("Done.");
+   }
+/*
 
    void system_contract::claimrewards( const name& owner ) {
       require_auth( owner );
@@ -186,6 +328,6 @@ namespace eosiosystem {
          token::transfer_action transfer_act{ token_account, { {vpay_account, active_permission}, {owner, active_permission} } };
          transfer_act.send( vpay_account, owner, asset(producer_per_vote_pay, core_symbol()), "producer vote pay" );
       }
-   }
+   }*/
 
 } //namespace eosiosystem

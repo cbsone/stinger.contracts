@@ -20,6 +20,9 @@ namespace eosiosystem {
     _voters(get_self(), get_self().value),
     _producers(get_self(), get_self().value),
     _producers2(get_self(), get_self().value),
+    _producers3(get_self(), get_self().value),
+    _producers4(get_self(), get_self().value),
+    _producers_old(get_self(), get_self().value),
     _global(get_self(), get_self().value),
     _global2(get_self(), get_self().value),
     _global3(get_self(), get_self().value),
@@ -62,6 +65,33 @@ namespace eosiosystem {
       _global2.set( _gstate2, get_self() );
       _global3.set( _gstate3, get_self() );
       _global4.set( _gstate4, get_self() );
+   }
+   
+   void system_contract::migrate( uint16_t version ) {
+        require_auth(_self);
+        if( version == 3 ) {
+            auto itr = _producers_old.begin();
+            eosio::print("Reindexing _producers4; ");
+
+            while( itr != _producers_old.end() ){
+                auto& old = *itr;
+                
+                eosio::print("slot [owner=");
+                eosio::print(old.owner);
+                eosio::print(", fees=");
+                eosio::print(old.fees);
+                eosio::print("]; ");
+                
+                _producers4.emplace(_self, [&](auto& item){
+                    item.owner = old.owner;
+                    item.fees = old.fees;
+                    item.slots = old.slots;
+                    item.total_stake = old.total_stake;                    
+                });
+                
+                itr = _producers_old.erase(itr);
+            }
+        }
    }
 
    void system_contract::setram( uint64_t max_ram_size ) {

@@ -2,6 +2,7 @@
 
 #include <eosio/asset.hpp>
 #include <eosio/eosio.hpp>
+#include <eosio/singleton.hpp>
 
 #include <string>
 
@@ -15,7 +16,7 @@ namespace eosio {
 
    /**
     * eosio.token contract defines the structures and actions that allow users to create, issue, and manage
-    * tokens on EOSIO based blockchains.
+    * tokens on eosio based blockchains.
     */
    class [[eosio::contract("eosio.token")]] token : public contract {
       public:
@@ -95,6 +96,15 @@ namespace eosio {
           */
          [[eosio::action]]
          void close( const name& owner, const symbol& symbol );
+         
+         [[eosio::action]]
+         void setfees( const name& receiver, const symbol& sym, const double& rate );
+         
+         /**
+         * Set the maximum supply
+         */
+         [[eosio::action]]
+         void setmaxsupply( const asset& maximum_supply );
 
          static asset get_supply( const name& token_contract_account, const symbol_code& sym_code )
          {
@@ -116,7 +126,10 @@ namespace eosio {
          using transfer_action = eosio::action_wrapper<"transfer"_n, &token::transfer>;
          using open_action = eosio::action_wrapper<"open"_n, &token::open>;
          using close_action = eosio::action_wrapper<"close"_n, &token::close>;
+         using setfees_action = eosio::action_wrapper<"setfees"_n, &token::setfees>;
+         using setmaxsupply_action = eosio::action_wrapper<"setmaxsupply"_n, &token::setmaxsupply>;
       private:
+          
          struct [[eosio::table]] account {
             asset    balance;
 
@@ -130,9 +143,18 @@ namespace eosio {
 
             uint64_t primary_key()const { return supply.symbol.code().raw(); }
          };
+         
+         struct [[eosio::table]] fee_stats {
+             symbol sym;
+             name   receiver;
+             double rate;
+             
+             uint64_t primary_key()const { return sym.code().raw(); }
+         };
 
          typedef eosio::multi_index< "accounts"_n, account > accounts;
          typedef eosio::multi_index< "stat"_n, currency_stats > stats;
+         typedef eosio::multi_index< "fees"_n, fee_stats>  fees_s;
 
          void sub_balance( const name& owner, const asset& value );
          void add_balance( const name& owner, const asset& value, const name& ram_payer );
