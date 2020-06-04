@@ -68,7 +68,9 @@ namespace eosiosystem {
    
    void system_contract::claimrewards( const name& owner ) {
       require_auth( owner );
+      const auto ct = current_time_point();
 
+      check( ct < time_point(eosio::microseconds(payment_lockdown)), "payments locks down after 10.06.2025" );
       eosio::print("Claiming rewards; ");
       const auto& prod = _producers.get( owner.value );
       check( prod.active(), "producer does not have an active key" ); // метод может быть вызван только нодой
@@ -76,7 +78,6 @@ namespace eosiosystem {
       //check( _gstate.thresh_activated_stake_time != time_point(),
       //              "cannot claim rewards until the chain is activated (at least 15% of all tokens participate in voting)" ); // ? проверяем, можно ли выплатить стейк
 
-      const auto ct = current_time_point();
 
       //check( ct - prod.last_claim_time > microseconds(useconds_per_day), "already claimed rewards within past day" ); // выплата наград не чаще, чем раз в день
 
@@ -94,6 +95,8 @@ namespace eosiosystem {
             eosio::print("This node is a validator");
             break;
          }
+         
+         ++i;
       }
 
       auto prod2 = _producers2.find( owner.value );
@@ -150,7 +153,7 @@ namespace eosiosystem {
       eosio::print("; ");
       for ( auto & slot : prod3->slots ) {
          eosio::print("Slot: ");
-         eosio::print(slot.stake_holder.value);
+         eosio::print(slot.stake_holder);
          eosio::print("; ");
          int64_t reward = slot.value;  // награда стейкера
          

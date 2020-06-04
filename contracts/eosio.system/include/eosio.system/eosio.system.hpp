@@ -263,16 +263,16 @@ namespace eosiosystem {
    };
 
    // ? *** CBS: таблица ноды/валидатора со стейкерами
-   struct [[eosio::table, eosio::contract("eosio.system")]] producer_info3 {
-      name                       owner;   // нода/валидатор
-      double                     fees;    // % комиссии
-      std::vector<slot_info>     slots;   // список стейкеров
-
-      int64_t                    total_stake; // общая сумма стейка 
-
-      uint64_t primary_key() const { return owner.value; }
-      EOSLIB_SERIALIZE( producer_info3, (owner)(fees)(slots) )
-   };
+//    struct [[eosio::table, eosio::contract("eosio.system")]] producer_info3 {
+//       name                       owner;   // нода/валидатор
+//       double                     fees;    // % комиссии
+//       std::vector<slot_info>     slots;   // список стейкеров
+// 
+//       int64_t                    total_stake; // общая сумма стейка 
+// 
+//       uint64_t primary_key() const { return owner.value; }
+//       EOSLIB_SERIALIZE( producer_info3, (owner)(fees)(slots) )
+//    };
    
    
    // ? *** CBS: таблица ноды/валидатора со стейкерами
@@ -337,10 +337,10 @@ namespace eosiosystem {
 
    typedef eosio::multi_index< "producers2"_n, producer_info2 > producers_table2;
    /// ***
-   typedef eosio::multi_index< "producers3"_n, producer_info3 > producers_table3;
-   typedef eosio::multi_index< "producers4"_n, producer_stake,
-                                indexed_by< "bytotalstake"_n, const_mem_fun<producer_stake, uint64_t, &producer_stake::by_total_stake> >
-                             > producers_table4;
+   // typedef eosio::multi_index< "producers3"_n, producer_info3 > producers_table3;
+   // typedef eosio::multi_index< "producers4"_n, producer_stake,
+   //                             indexed_by< "bytotalstake"_n, const_mem_fun<producer_stake, uint64_t, &producer_stake::by_total_stake> >
+   //                          > producers_table4;
     typedef eosio::multi_index< "producers5"_n, producer_stake,
                                 indexed_by< "bytotalstake"_n, const_mem_fun<producer_stake, uint64_t, &producer_stake::by_total_stake> >
                              > producers_table5;
@@ -564,8 +564,8 @@ namespace eosiosystem {
          voters_table             _voters;
          producers_table          _producers;
          producers_table2         _producers2;
-         producers_table3         _producers3;
-         producers_table4         _producers_old;
+         //producers_table3         _producers3;
+         //producers_table4         _producers_old;
          producers_table5         _producers4;
          global_state_singleton   _global;
          global_state2_singleton  _global2;
@@ -604,6 +604,8 @@ namespace eosiosystem {
          static constexpr symbol    cbsch_symbol   = symbol(symbol_code("CBSCH"), 4);
          static constexpr int64_t   vote_mul     = 7;  // delegate reward
          static constexpr int64_t   node_mul     = 6;  // node reward
+         
+         static constexpr int64_t payment_lockdown = 1749513600000000;
          /// ***
 
          system_contract( name s, name code, datastream<const char*> ds );

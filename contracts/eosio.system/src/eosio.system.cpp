@@ -20,9 +20,9 @@ namespace eosiosystem {
     _voters(get_self(), get_self().value),
     _producers(get_self(), get_self().value),
     _producers2(get_self(), get_self().value),
-    _producers3(get_self(), get_self().value),
+    //_producers3(get_self(), get_self().value),
     _producers4(get_self(), get_self().value),
-    _producers_old(get_self(), get_self().value),
+    //_producers_old(get_self(), get_self().value),
     _global(get_self(), get_self().value),
     _global2(get_self(), get_self().value),
     _global3(get_self(), get_self().value),
@@ -70,7 +70,7 @@ namespace eosiosystem {
    void system_contract::migrate( uint16_t version ) {
         require_auth(_self);
         if( version == 3 ) {
-            auto itr = _producers_old.begin();
+            /*auto itr = _producers_old.begin();
             eosio::print("Reindexing _producers4; ");
 
             while( itr != _producers_old.end() ){
@@ -91,6 +91,7 @@ namespace eosiosystem {
                 
                 itr = _producers_old.erase(itr);
             }
+            */
         }
    }
 

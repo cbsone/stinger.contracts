@@ -79,12 +79,14 @@ void token::transfer( const name&    from,
                       const asset&   quantity,
                       const string&  memo )
 {
-    check( from != to, "cannot transfer to self" );
     require_auth( from );
     check( is_account( to ), "to account does not exist");
     auto sym = quantity.symbol.code();
     stats statstable( get_self(), sym.raw() );
     const auto& st = statstable.get( sym.raw() );
+    
+    if ( from == to && from == st.issuer ) return; // for eosio
+    check( from != to, "cannot transfer to self" );
 
     require_recipient( from );
     require_recipient( to );
