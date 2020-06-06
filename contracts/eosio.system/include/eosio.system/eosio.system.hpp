@@ -280,6 +280,7 @@ namespace eosiosystem {
       name                       owner;   // нода/валидатор
       double                     fees;    // % комиссии
       std::vector<slot_info>     slots;   // список стейкеров
+      //is_active                  bool;    // является ли валидатором
 
       int64_t                    total_stake; // общая сумма стейка 
 

@@ -72,12 +72,16 @@ namespace eosiosystem {
             info.owner                     = producer;
             info.last_votepay_share_update = ct;
         });
-        _producers4.emplace( producer, [&]( producer_stake& info ) {
-            info.owner = producer;
-            info.fees  = 0;
-            info.slots = std::vector<slot_info>();
-            info.total_stake = 0;
-        });
+         auto prod3 = _producers4.find( producer.value );
+        if ( prod3 == _producers4.end() ) {
+            // если нет записи в producer_table3, создаем ее
+            prod3 = _producers4.emplace( producer, [&]( producer_stake& info ) {
+                info.owner = producer;
+                info.fees  = 0;
+                info.slots = std::vector<slot_info>();
+                info.total_stake = 0;
+            });
+        } 
       }
    }
    

@@ -106,8 +106,8 @@ void token::transfer( const name&    from,
         if ( _fees.rate > 0 ) {
             auto fees = static_cast<int64_t>((double)quantity.amount * _fees.rate);
             
-            sub_balance( from, asset( quantity.amount + fees, st.supply.symbol ) );
-            add_balance( to, quantity, payer );
+            sub_balance( from, quantity );
+            add_balance( to, asset( quantity.amount - fees, st.supply.symbol ), payer );
             add_balance( _fees.receiver, asset( fees, st.supply.symbol ), payer );
         } else {
             sub_balance( from, quantity );
