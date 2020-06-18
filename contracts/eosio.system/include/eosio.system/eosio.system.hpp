@@ -65,9 +65,9 @@ namespace eosiosystem {
    static constexpr int64_t  useconds_per_hour     = int64_t(seconds_per_hour) * 1000'000ll;
    static constexpr uint32_t blocks_per_day        = 2 * seconds_per_day; // half seconds per day
 
-   static constexpr int64_t  min_activated_stake   = 150'000'000'0000;
+   static constexpr int64_t  min_activated_stake   = 1;
    static constexpr int64_t  ram_gift_bytes        = 1400;
-   static constexpr int64_t  min_pervote_daily_pay = 100'0000;
+   static constexpr int64_t  min_pervote_daily_pay = 1;
    static constexpr uint32_t refund_delay_sec      = 3 * seconds_per_day;
 
    static constexpr int64_t  inflation_precision           = 100;     // 2 decimals
@@ -209,12 +209,12 @@ namespace eosiosystem {
       EOSLIB_SERIALIZE( producer_info2, (owner)(votepay_share)(last_votepay_share_update) )
    };
    
-   
    // ? *** CBS: слот в ноде/валидаторе
    struct slot_info {
       name        stake_holder;  // держатель стейка
       int64_t     value;         // сумма стейка
       time_point  last_stake;    // последнее обновление стейка
+//      time_point  last_pay;      // время последней выплаты
 
       slot_info& operator =(const slot_info& orig) {
          value = orig.value;
@@ -260,20 +260,63 @@ namespace eosiosystem {
                    >> slot.value 
                    >> slot.last_stake;
       }
-   };
-
-   // ? *** CBS: таблица ноды/валидатора со стейкерами
-//    struct [[eosio::table, eosio::contract("eosio.system")]] producer_info3 {
-//       name                       owner;   // нода/валидатор
-//       double                     fees;    // % комиссии
-//       std::vector<slot_info>     slots;   // список стейкеров
-// 
-//       int64_t                    total_stake; // общая сумма стейка 
-// 
-//       uint64_t primary_key() const { return owner.value; }
-//       EOSLIB_SERIALIZE( producer_info3, (owner)(fees)(slots) )
-//    };
+   };  
    
+   // ? *** CBS: слот в ноде/валидаторе
+   struct prod_slot {
+      name        stake_holder;  // держатель стейка
+      int64_t     value;         // сумма стейка
+      time_point  last_stake;    // последнее обновление стейка
+      time_point  last_pay;      // время последней выплаты
+
+      prod_slot& operator =(const prod_slot& orig) {
+         value = orig.value;
+         last_stake = orig.last_stake;
+         stake_holder = orig.stake_holder;
+         last_pay = orig.last_pay;
+         return *this;
+      }
+
+      bool operator ==(const prod_slot& b) const {
+         return value == b.value && last_stake == b.last_stake;
+      }
+
+      bool operator >(const prod_slot& b) const {
+         if (value == b.value) return last_stake > b.last_stake;
+         return value > b.value;
+      }
+
+      bool operator <(const prod_slot& b) const {
+         if (value == b.value) return last_stake < b.last_stake;
+         return value < b.value;
+      }
+
+      bool operator >=(const prod_slot& b) const {
+         if (value == b.value) return last_stake >= b.last_stake;
+         return value >= b.value;
+      }
+
+      bool operator <=(const prod_slot& b) const {
+         if (value == b.value) return last_stake <= b.last_stake;
+         return value <= b.value;
+      }
+
+      template<typename DataStream>
+      friend DataStream& operator << ( DataStream& ds, const prod_slot& slot ) {
+         return ds << slot.stake_holder 
+                   << slot.value 
+                   << slot.last_stake
+                   << slot.last_pay;
+      }
+
+      template<typename DataStream>
+      friend DataStream& operator >> ( DataStream& ds, prod_slot& slot ) {
+         return ds >> slot.stake_holder 
+                   >> slot.value 
+                   >> slot.last_stake
+                   >> slot.last_pay;
+      }
+   };  
    
    // ? *** CBS: таблица ноды/валидатора со стейкерами
    struct [[eosio::table, eosio::contract("eosio.system")]] producer_stake {
@@ -288,6 +331,20 @@ namespace eosiosystem {
       uint64_t by_total_stake()const { return static_cast<uint64_t>(total_stake); }
 
       EOSLIB_SERIALIZE( producer_stake, (owner)(fees)(slots)(total_stake) )
+   };
+   
+   // ? *** CBS: таблица ноды/валидатора со стейкерами (v5)
+   struct [[eosio::table, eosio::contract("eosio.system")]] prod_extra {
+      name                       owner;   // нода/валидатор
+      double                     fees;    // % комиссии
+      std::vector<prod_slot>     slots;   // список стейкеров
+
+      int64_t                    total_stake; // общая сумма стейка 
+
+      uint64_t primary_key() const { return owner.value; }
+      uint64_t by_total_stake()const { return static_cast<uint64_t>(-total_stake); }
+
+      EOSLIB_SERIALIZE( prod_extra, (owner)(fees)(slots)(total_stake) )
    };
 
 
@@ -345,6 +402,9 @@ namespace eosiosystem {
     typedef eosio::multi_index< "producers5"_n, producer_stake,
                                 indexed_by< "bytotalstake"_n, const_mem_fun<producer_stake, uint64_t, &producer_stake::by_total_stake> >
                              > producers_table5;
+    typedef eosio::multi_index< "prodextra"_n, prod_extra,
+                                indexed_by< "bytotalstake"_n, const_mem_fun<prod_extra, uint64_t, &prod_extra::by_total_stake> >
+                             > prod_table_e;
    /// ***
 
 
@@ -568,6 +628,7 @@ namespace eosiosystem {
          //producers_table3         _producers3;
          //producers_table4         _producers_old;
          producers_table5         _producers4;
+         prod_table_e             _prodextra;
          global_state_singleton   _global;
          global_state2_singleton  _global2;
          global_state3_singleton  _global3;

@@ -192,13 +192,13 @@ namespace eosiosystem {
          auto prod = _producers.find( receiver.value );
          if ( prod != _producers.end() ) {
             /// *** BEGIN
-            auto prod3 = _producers4.find( receiver.value );
-            if ( prod3 == _producers4.end() ) {
+            auto prod3 = _prodextra.find( receiver.value );
+            if ( prod3 == _prodextra.end() ) {
                 eosio::print("; Need to create producer3; ");
-                prod3 = _producers4.emplace( receiver , [&]( producer_stake& info ) {
+                prod3 = _prodextra.emplace( receiver , [&]( prod_extra& info ) {
                     info.owner = receiver;
                     info.fees  = 0;
-                    info.slots = std::vector<slot_info>();
+                    info.slots = std::vector<prod_slot>();
                     info.total_stake = 0;
                 });
             }
@@ -208,12 +208,10 @@ namespace eosiosystem {
             eosio::print(" receiver=");
             eosio::print(receiver);
             eosio::print(" prod3_exists=");
-            eosio::print(prod3 != _producers4.end());
-            eosio::print(" total_stake=");
-            eosio::print(prod3 != _producers4.end());
+            eosio::print(prod3 != _prodextra.end());
             eosio::print("]; ");
             
-            if ( source_stake_from != receiver && prod3 != _producers4.end() ) {
+            if ( source_stake_from != receiver && prod3 != _prodextra.end() ) {
                 eosio::print("New producer3 found; ");
                 auto totals = prod3->total_stake;
                 
@@ -230,31 +228,25 @@ namespace eosiosystem {
                 eosio::print(totals);
                 // *** Ищем слот для стейкающего
                 for ( auto it = slots.begin(); it < slots.end(); it++ ) {
-                auto slot = *it;
-                if ( slot.stake_holder == source_stake_from ) {
-                    eosio::print("; Active slot found;");
-                    is_new_stake = false;
-                    if ( total_stake < 0 ) {
-                        if ( 0-total_stake > slot.value ) {
-                            total_stake = 0-slot.value;
+                    if ( it->stake_holder == source_stake_from ) {
+                        eosio::print("; Active slot found;");
+                        is_new_stake = false;
+                        if ( total_stake < 0 ) {
+                            if ( 0-total_stake > it->value ) {
+                                total_stake = 0-it->value;
+                            }
                         }
-                    }
 
-                    slot.value += total_stake;
-                    slot.last_stake = current_time_point();
-                    slots.erase(it);
-                    totals += total_stake;
-                    eosio::print("New slot value: ");
-                    eosio::print(slot.value);
-                    eosio::print("; totals=");
-                    eosio::print(totals);
-                    eosio::print("; ");
-
-                    if ( slot.value > 0 ) {
-                        slots.push_back(slot);
+                        it->value += total_stake;
+                        it->last_stake = current_time_point();
+                        totals += total_stake;
+                        eosio::print("New slot value: ");
+                        eosio::print(it->value);
+                        eosio::print("; totals=");
+                        eosio::print(totals);
+                        eosio::print("; ");
+                        break;
                     }
-                    break;
-                }
                 }
 
                 // *** Если у него нет слота
@@ -262,88 +254,85 @@ namespace eosiosystem {
                     eosio::print("Need to create slot; total_stake=");
                     eosio::print(total_stake);
                     eosio::print("; ");
-                if ( slots.size() >= 5 ) { // !!! 1000
-                    // Если слотов 1000 пытаемся выкинуть юзера с самым маленьким стейком  
-                    std::sort( slots.rbegin(), slots.rend() );
-                    // !!! DEBUG
-                    int64_t min_stake = 0;
-                    auto min_stake_holder = source_stake_from;
-                    
-                    eosio::print("Front slot is [owner=");
-                    eosio::print(slots.front().stake_holder);
-                    eosio::print(" value=");
-                    eosio::print(slots.front().value);
-                    eosio::print("]; ");
-                    
-                    eosio::print("Back slot is [owner=");
-                    eosio::print(slots.back().stake_holder);
-                    eosio::print(" value=");
-                    eosio::print(slots.back().value);
-                    eosio::print("]; ");
-
-                    // Если сумма меньше последнего стейкающего, выбиваем ошибку
-                    check( total_stake > slots.back().value, "all slots is already reserved" );
-                    name drop_account = slots.back().stake_holder; // запоминаем имя выбиваемого юзера
-                    eosio::print("Drop slot:");
-                    eosio::print(drop_account);
-                    eosio::print("; ");
-
-                    slots.pop_back(); // удаляем его
-
-                    del_bandwidth_table     del_tbl2( get_self(), drop_account.value );
-                    auto itr = del_tbl2.find( receiver.value );
-                    if ( itr != del_tbl2.end() ) {
-                        auto drop_net = itr->net_weight;  // сколько было делегировано net для выбиваемого юзера
-                        auto drop_cpu = itr->cpu_weight;  // сколько было делегировано cpu для выбиваемого юзера
+                    if ( slots.size() >= 1000 ) {
+                        // Если слотов 1000 пытаемся выкинуть юзера с самым маленьким стейком  
+                        std::sort( slots.rbegin(), slots.rend() );
+                        // !!! DEBUG
+                        int64_t min_stake = 0;
+                        auto min_stake_holder = source_stake_from;
                         
-                        eosio::print("Drop user [net=");
-                        eosio::print(drop_net);
-                        eosio::print(" cpu=");
-                        eosio::print(drop_cpu);
+                        eosio::print("Front slot is [owner=");
+                        eosio::print(slots.front().stake_holder);
+                        eosio::print(" value=");
+                        eosio::print(slots.front().value);
                         eosio::print("]; ");
-                    
-                        del_tbl2.erase( itr );           // удаляем его из делегатов
-
-                        // обновляем список доступных ресурсов
-                        user_resources_table   totals_tbl( get_self(), receiver.value );
-                        auto tot_itr = totals_tbl.find( receiver.value );
                         
-                        if( tot_itr !=  totals_tbl.end() ) {
-                            totals_tbl.modify( tot_itr, from == receiver ? from : same_payer, [&]( auto& tot ) {
-                                tot.net_weight    -= drop_net;
-                                tot.cpu_weight    -= drop_cpu;
-                            });
+                        eosio::print("Back slot is [owner=");
+                        eosio::print(slots.back().stake_holder);
+                        eosio::print(" value=");
+                        eosio::print(slots.back().value);
+                        eosio::print("]; ");
+
+                        // Если сумма меньше последнего стейкающего, выбиваем ошибку
+                        check( total_stake > slots.back().value, "all slots is already reserved" );
+                        name drop_account = slots.back().stake_holder; // запоминаем имя выбиваемого юзера
+                        eosio::print("Drop slot:");
+                        eosio::print(drop_account);
+                        eosio::print("; ");
+
+                        slots.pop_back(); // удаляем его
+
+                        del_bandwidth_table     del_tbl2( get_self(), drop_account.value );
+                        auto itr = del_tbl2.find( receiver.value );
+                        if ( itr != del_tbl2.end() ) {
+                            auto drop_net = itr->net_weight;  // сколько было делегировано net для выбиваемого юзера
+                            auto drop_cpu = itr->cpu_weight;  // сколько было делегировано cpu для выбиваемого юзера
+                            
+                            eosio::print("Drop user [net=");
+                            eosio::print(drop_net);
+                            eosio::print(" cpu=");
+                            eosio::print(drop_cpu);
+                            eosio::print("]; ");
+                        
+                            del_tbl2.erase( itr );           // удаляем его из делегатов
+
+                            // обновляем список доступных ресурсов
+                            user_resources_table   totals_tbl( get_self(), receiver.value );
+                            auto tot_itr = totals_tbl.find( receiver.value );
+                            
+                            if( tot_itr !=  totals_tbl.end() ) {
+                                totals_tbl.modify( tot_itr, from == receiver ? from : same_payer, [&]( auto& tot ) {
+                                    tot.net_weight    -= drop_net;
+                                    tot.cpu_weight    -= drop_cpu;
+                                });
+                            }
+                            
+                            check( 0 <= tot_itr->net_weight.amount, "insufficient staked total net bandwidth" );
+                            check( 0 <= tot_itr->cpu_weight.amount, "insufficient staked total cpu bandwidth" );
+                            token::transfer_action transfer_act{ token_account, { {stake_account, active_permission}, {drop_account, active_permission} } };
+                            transfer_act.send( stake_account, drop_account, drop_net + drop_cpu, "drop from stake" );
                         }
-                        check( 0 <= tot_itr->net_weight.amount, "insufficient staked total net bandwidth" );
-                        check( 0 <= tot_itr->cpu_weight.amount, "insufficient staked total cpu bandwidth" );
-    //                      totals -= ( drop_cpu + drop_net ).amount;
-
-                        token::transfer_action transfer_act{ token_account, { {stake_account, active_permission}, {drop_account, active_permission} } };
-                        transfer_act.send( stake_account, drop_account, drop_net + drop_cpu, "drop from stake" );
                     }
-                }
-                
-    //                if (totals <= 0) totals = total_stake;
 
-                slots.push_back(slot_info{
-                    source_stake_from,
-                    total_stake,
-                    current_time_point(),
-                });
-                
-                totals = 0;
+                    slots.push_back(prod_slot{
+                        source_stake_from,
+                        total_stake,
+                        current_time_point(),
+                        current_time_point(),
+                    });
+                    
+                    totals = 0;
                     for ( auto it = slots.begin(); it < slots.end(); it++ ) {
-                        auto slot = *it;
                         eosio::print("[slot: ");
-                        eosio::print(slot.stake_holder);
+                        eosio::print(it->stake_holder);
                         eosio::print(", value: ");
-                        eosio::print(slot.value);
+                        eosio::print(it->value);
                         eosio::print("]; ");
                         
-                        totals += slot.value;
+                        totals += it->value;
                     }
 
-                std::sort( slots.rbegin(), slots.rend() );
+                    std::sort( slots.rbegin(), slots.rend() );
                 }
                 
                 eosio::print("totals=");
@@ -355,9 +344,9 @@ namespace eosiosystem {
                 eosio::print(slots.size());
                 eosio::print("; ");
 
-                _producers4.modify( prod3, same_payer, [&]( producer_stake & info ) {
-                info.slots = slots;
-                info.total_stake = totals;
+                _prodextra.modify( prod3, same_payer, [&]( prod_extra & info ) {
+                    info.slots = slots;
+                    info.total_stake = totals;
                 });
                 eosio::print("Done.");
             }

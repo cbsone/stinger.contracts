@@ -22,6 +22,7 @@ namespace eosiosystem {
     _producers2(get_self(), get_self().value),
     //_producers3(get_self(), get_self().value),
     _producers4(get_self(), get_self().value),
+    _prodextra(get_self(), get_self().value),
     //_producers_old(get_self(), get_self().value),
     _global(get_self(), get_self().value),
     _global2(get_self(), get_self().value),
@@ -69,11 +70,11 @@ namespace eosiosystem {
    
    void system_contract::migrate( uint16_t version ) {
         require_auth(_self);
-        if( version == 3 ) {
-            /*auto itr = _producers_old.begin();
-            eosio::print("Reindexing _producers4; ");
+        if( version == 4 ) {
+            auto itr = _producers4.begin();
+            eosio::print("Creating producers extra...");
 
-            while( itr != _producers_old.end() ){
+            while( itr != _producers4.end() ){
                 auto& old = *itr;
                 
                 eosio::print("slot [owner=");
@@ -82,16 +83,36 @@ namespace eosiosystem {
                 eosio::print(old.fees);
                 eosio::print("]; ");
                 
-                _producers4.emplace(_self, [&](auto& item){
+                auto slots = old.slots;
+                std::vector<prod_slot> n_slots;
+                
+                auto prod = _producers.find( old.owner.value );
+                if ( prod == _producers.end() ) {
+                    //itr = _producers4.erase(itr);
+                    itr++;
+                    continue;
+                }
+                
+                for ( auto it = slots.begin(); it < slots.end(); it++ ) {
+                    auto slot = *it;
+                    n_slots.push_back( prod_slot {
+                        slot.stake_holder,
+                        slot.value,
+                        slot.last_stake,
+                        prod->last_claim_time,                        
+                    } );
+                }
+                
+                _prodextra.emplace(_self, [&](auto& item){
                     item.owner = old.owner;
                     item.fees = old.fees;
-                    item.slots = old.slots;
+                    item.slots = n_slots;
                     item.total_stake = old.total_stake;                    
                 });
                 
-                itr = _producers_old.erase(itr);
+                //itr = _producers4.erase(itr);
+                itr++;
             }
-            */
         }
    }
 

@@ -22,8 +22,8 @@ namespace eosiosystem {
       _gstate2.last_block_num = timestamp;
 
       /** until activation, no new rewards are paid */
-      if( _gstate.thresh_activated_stake_time == time_point() )
-         return;
+      // if( _gstate.thresh_activated_stake_time == time_point() )
+      //   return;
 
       if( _gstate.last_pervote_bucket_fill == time_point() )  /// start the presses
          _gstate.last_pervote_bucket_fill = current_time_point();
@@ -74,30 +74,36 @@ namespace eosiosystem {
       eosio::print("Claiming rewards; ");
       const auto& prod = _producers.get( owner.value );
       check( prod.active(), "producer does not have an active key" ); // метод может быть вызван только нодой
+      
+      eosio::print(" Chain activated: ");
+      eosio::print(_gstate.thresh_activated_stake_time != time_point());
+      eosio::print("; ");
 
       //check( _gstate.thresh_activated_stake_time != time_point(),
       //              "cannot claim rewards until the chain is activated (at least 15% of all tokens participate in voting)" ); // ? проверяем, можно ли выплатить стейк
 
 
-      //check( ct - prod.last_claim_time > microseconds(useconds_per_day), "already claimed rewards within past day" ); // выплата наград не чаще, чем раз в день (MAINNET)
-      check( ct - prod.last_claim_time > microseconds(useconds_per_hour / 60), "already claimed rewards within past minute" ); // выплата наград не чаще, чем раз в минуту (TESTNET)
+      // check( ct - prod.last_claim_time > microseconds(useconds_per_hour * 3), "already claimed rewards within past 3 hours" ); // выплата наград не чаще, чем раз в 3 часа (MAINNET)
+      //check( ct - prod.last_claim_time > microseconds(useconds_per_hour / 60), "already claimed rewards within past minute" ); // выплата наград не чаще, чем раз в минуту (TESTNET)
 
       const asset token_supply   = token::get_supply(token_account, cbs_symbol.code() ); // получить системный токен
       const auto usecs_since_last_fill = (ct - _gstate.last_pervote_bucket_fill).count();    // сколько времени прошло после предыдущего пересчета наград
 
       bool is_validator = false;                            // это нода или валидатор
-      auto idx = _producers4.get_index<"bytotalstake"_n>();  
+      auto idx = _prodextra.get_index<"bytotalstake"_n>();  
       int i = 0;
 
       // ищем ноду в топ-21, если она там есть - это валидатор
-      for( auto it = idx.cbegin(); it != idx.cend() && i < 21 && 0 < it->total_stake; ++it ) {
-         if ((*it).owner == owner) {
-            is_validator = true;
-            eosio::print("This node is a validator; ");
-            break;
-         }
-         
-         ++i;
+      for( auto it = idx.cbegin(); it != idx.cend() && i < 21; ++it ) {
+          if (it->total_stake > 0) {
+            if (it->owner == owner) {
+                is_validator = true;
+                eosio::print("This node is a validator; ");
+                break;
+            }
+            
+            ++i;
+          }
       }
 
       auto prod2 = _producers2.find( owner.value );
@@ -118,13 +124,13 @@ namespace eosiosystem {
       }
 
       // получаем список стейкеров
-      auto prod3 = _producers4.find( owner.value );
-      if ( prod3 == _producers4.end() ) {
+      auto prod3 = _prodextra.find( owner.value );
+      if ( prod3 == _prodextra.end() ) {
          // если нет записи в producer_table3, создаем ее
-         prod3 = _producers4.emplace( owner, [&]( producer_stake& info ) {
+         prod3 = _prodextra.emplace( owner, [&]( prod_extra& info ) {
             info.owner = owner;
             info.fees  = 0;
-            info.slots = std::vector<slot_info>();
+            info.slots = std::vector<prod_slot>();
             info.total_stake = 0;
          });
       }
@@ -143,39 +149,59 @@ namespace eosiosystem {
       // Временный массив с наградами
       std::vector<std::pair<name, int64_t>> rewards;
       
+      /* !!! OLD
       // Множитель по времени последней выплаты в %
-      double time_mul = (ct - prod.last_claim_time).count() / ( useconds_per_day * 30 ); // mainnet
+      double time_mul = (double)((ct - prod.last_claim_time).count() / 1000) / (double)( (useconds_per_day / 1000) * 30 ); // mainnet
       //double time_mul = (ct - prod.last_claim_time).count() / ( useconds_per_hour / 30 ); // testnet
       eosio::print("Time multiplier: ");
+      eosio::print((ct - prod.last_claim_time).count());
+      eosio::print(" / ");
+      eosio::print( useconds_per_day * 30 );
+      eosio::print(" <--> ");
       eosio::print(time_mul);
       eosio::print("; ");
+      */
+      
+      auto slots = prod3->slots;
       
       eosio::print("Checking slots (count=");
-      eosio::print(prod3->slots.size());
-      eosio::print("; ");
-      for ( auto & slot : prod3->slots ) {
+      eosio::print(slots.size());
+      eosio::print("); ");
+      for ( auto it = slots.begin(); it < slots.end(); it++ ) {
          eosio::print("Slot: ");
-         eosio::print(slot.stake_holder);
+         eosio::print(it->stake_holder);
          eosio::print("; ");
-         int64_t reward = slot.value;  // награда стейкера
          
          eosio::print("Stake: ");
-         eosio::print(reward);
-         eosio::print("; ");
+         eosio::print(it->value);
+         eosio::print("; time - last_pay: ");
+         eosio::print((ct - it->last_pay).count() / 1000);
+         
+         if ( ct - it->last_pay < microseconds(useconds_per_hour * 3) ) {
+             eosio::print(" :: Already claimed for this slot at past 3 hour, skip; ");
+             continue;
+         }
 
+         int64_t reward = it->value;  // награда стейкера
+         double time_mul = (double)( (ct - it->last_pay).count() ) / (double)( useconds_per_day * 30 );
+         
+         eosio::print("; time_mul: ");
+         eosio::print(time_mul);
+         eosio::print("; ");
+         
          if ( is_validator ) {
             reward *= vote_mul;  // x7
          } else {
             reward *= node_mul;  // x6
          }
          
-         reward = static_cast<int64_t>(time_mul * (double)reward);         // рассчитываем награду с учетом времени с прошлой выплаты
+         reward = (int64_t)(time_mul * (double)reward);         // рассчитываем награду с учетом времени с прошлой выплаты
          
          eosio::print("Reward: ");
          eosio::print(reward);
          eosio::print("; ");
 
-         int64_t fee = static_cast<int64_t>(prod3->fees * (double)reward); // рассчитываем комиссию
+         int64_t fee = (int64_t)(prod3->fees * (double)reward); // рассчитываем комиссию
          eosio::print("Fee: ");
          eosio::print(fee);
          eosio::print("; ");
@@ -184,7 +210,15 @@ namespace eosiosystem {
          fee_rate += fee;              // комиссию с этого стейкера плюсуем к общей комисии
          new_tokens += reward + fee;   // прибавляем награду и комиссию к общему объему эмисии
 
-         rewards.push_back(std::make_pair(slot.stake_holder, reward));  // записываем сколько выплатить награды этому стейкеру
+         rewards.push_back(std::make_pair(it->stake_holder, reward));  // записываем сколько выплатить награды этому стейкеру
+         
+         if ( reward > 0 ) {
+             it->last_pay = ct;
+             
+            eosio::print("ct - last pay after: ");
+            eosio::print((ct - it->last_pay).count());
+            eosio::print("; ");
+         }
       }
 
       eosio::print("New tokens: ");
@@ -216,6 +250,11 @@ namespace eosiosystem {
         // save last claim time
         _producers.modify( prod, same_payer, [&]( producer_info& info ){
             info.last_claim_time = ct;
+        });
+        
+        std::sort( slots.rbegin(), slots.rend() );
+        _prodextra.modify( prod3, same_payer, [&]( auto & info ) {
+            info.slots = slots;
         });
       }
       

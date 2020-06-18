@@ -48,13 +48,13 @@ namespace eosiosystem {
             // When introducing the producer2 table row for the first time, the producer's votes must also be accounted for in the global total_producer_votepay_share at the same time.
          }
          
-         auto prod3 = _producers4.find( producer.value );
-        if ( prod3 == _producers4.end() ) {
+         auto prod3 = _prodextra.find( producer.value );
+        if ( prod3 == _prodextra.end() ) {
             // если нет записи в producer_table3, создаем ее
-            prod3 = _producers4.emplace( producer, [&]( producer_stake& info ) {
+            prod3 = _prodextra.emplace( producer, [&]( prod_extra& info ) {
                 info.owner = producer;
                 info.fees  = 0;
-                info.slots = std::vector<slot_info>();
+                info.slots = std::vector<prod_slot>();
                 info.total_stake = 0;
             });
         }
@@ -72,13 +72,13 @@ namespace eosiosystem {
             info.owner                     = producer;
             info.last_votepay_share_update = ct;
         });
-         auto prod3 = _producers4.find( producer.value );
-        if ( prod3 == _producers4.end() ) {
+         auto prod3 = _prodextra.find( producer.value );
+        if ( prod3 == _prodextra.end() ) {
             // если нет записи в producer_table3, создаем ее
-            prod3 = _producers4.emplace( producer, [&]( producer_stake& info ) {
+            prod3 = _prodextra.emplace( producer, [&]( prod_extra& info ) {
                 info.owner = producer;
                 info.fees  = 0;
-                info.slots = std::vector<slot_info>();
+                info.slots = std::vector<prod_slot>();
                 info.total_stake = 0;
             });
         } 
@@ -90,17 +90,17 @@ namespace eosiosystem {
        auto prod = _producers.find( producer.value );
        check( prod != _producers.end(), "producer not found" );
        
-        auto prod3 = _producers4.find( producer.value );
-        if ( prod3 == _producers4.end() ) {
+        auto prod3 = _prodextra.find( producer.value );
+        if ( prod3 == _prodextra.end() ) {
             // если нет записи в producer_table3, создаем ее
-            prod3 = _producers4.emplace( producer, [&]( producer_stake& info ) {
+            prod3 = _prodextra.emplace( producer, [&]( prod_extra& info ) {
                 info.owner = producer;
                 info.fees  = rate;
-                info.slots = std::vector<slot_info>();
+                info.slots = std::vector<prod_slot>();
                 info.total_stake = 0;
             });
         } else {
-            _producers4.modify( prod3, same_payer, [&]( producer_stake& info ) {
+            _prodextra.modify( prod3, same_payer, [&]( prod_extra& info ) {
                 info.fees  = rate;
             });
         }
