@@ -70,7 +70,7 @@ namespace eosiosystem {
    
    void system_contract::migrate( uint16_t version ) {
         require_auth(_self);
-        if( version == 4 ) {
+        if( version == 5 ) {
             auto itr = _producers4.begin();
             eosio::print("Creating producers extra...");
 
